@@ -252,11 +252,123 @@ ma3-bridge-local/
 2. Check the result directory path is accessible
 3. Verify MA3 can write to the temp directory
 
+## Production Setup (Expose to Internet)
+
+To allow users of your deployed Vercel app to test scripts on YOUR MA3 console, you need to expose the bridge to the internet.
+
+### Step 1: Enable API Authentication
+
+**IMPORTANT:** Before exposing to the internet, enable API authentication!
+
+1. Create a strong secret key:
+   ```bash
+   # Generate a random 32-character key
+   openssl rand -hex 16
+   ```
+
+2. Add to your `.env` file:
+   ```env
+   API_SECRET=your-generated-secret-key
+   ```
+
+3. Restart the bridge - you should see:
+   ```
+   🔒 API Authentication: ENABLED (API_SECRET set)
+   ```
+
+### Step 2: Expose with ngrok (Easiest)
+
+1. Install ngrok: https://ngrok.com/download
+
+2. Start the bridge:
+   ```bash
+   npm start
+   ```
+
+3. In a new terminal, start ngrok:
+   ```bash
+   ngrok http 3001
+   ```
+
+4. Copy the HTTPS URL (e.g., `https://abc123.ngrok-free.app`)
+
+### Step 2 (Alternative): Cloudflare Tunnel
+
+More stable for long-term use:
+
+1. Install cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+
+2. Start tunnel:
+   ```bash
+   cloudflared tunnel --url http://localhost:3001
+   ```
+
+3. Copy the generated URL
+
+### Step 3: Configure Vercel Environment Variables
+
+In your Vercel dashboard (Settings → Environment Variables):
+
+```
+NEXT_PUBLIC_MA3_BRIDGE_URL=https://your-ngrok-url.ngrok-free.app
+NEXT_PUBLIC_MA3_BRIDGE_SECRET=your-generated-secret-key
+```
+
+> **Note:** Use `NEXT_PUBLIC_` prefix so these are available in the browser.
+
+### Step 4: Redeploy
+
+Redeploy your Vercel app for changes to take effect:
+```bash
+vercel --prod
+```
+
+### Production Checklist
+
+- [ ] API_SECRET is set in bridge `.env`
+- [ ] ngrok/tunnel is running and stable
+- [ ] NEXT_PUBLIC_MA3_BRIDGE_URL is set in Vercel
+- [ ] NEXT_PUBLIC_MA3_BRIDGE_SECRET matches API_SECRET
+- [ ] MA3 onPC is running with OSC enabled
+- [ ] Test the "Test Script" button from production app
+
+### Keeping the Bridge Running
+
+For persistent operation:
+
+**Windows (Task Scheduler):**
+Create a scheduled task to run `start-bridge.bat` at startup.
+
+**Linux/Mac (systemd or pm2):**
+```bash
+# Using pm2
+npm install -g pm2
+pm2 start npm --name "ma3-bridge" -- start
+pm2 startup
+pm2 save
+```
+
+### Troubleshooting Production
+
+**"Cannot connect to MA3 Bridge"**
+- Verify ngrok/tunnel is running
+- Check the URL in Vercel matches your tunnel URL
+- ngrok free tier URLs change each restart - update Vercel env vars
+
+**"Unauthorized: Invalid or missing API secret"**
+- Verify NEXT_PUBLIC_MA3_BRIDGE_SECRET matches API_SECRET
+- Redeploy Vercel app after changing env vars
+
+**ngrok rate limits**
+- Free ngrok has request limits
+- Consider ngrok paid plan or Cloudflare Tunnel for production
+
 ## Security Notes
 
-- The bridge only accepts connections from localhost by default
-- No authentication is implemented (suitable for local development)
+- **Always enable API_SECRET** when exposing to internet
+- The bridge validates X-API-Secret header on all requests (except /health)
 - Result files are stored in temp directory and cleaned up after execution
+- Consider IP allowlisting in ngrok for additional security
 
 ## License
 

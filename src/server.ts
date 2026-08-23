@@ -21,10 +21,46 @@ const SCRIPT_TIMEOUT = Number.parseInt(process.env.SCRIPT_TIMEOUT || '30000', 10
 const CLEANUP_TEMP_FILES = process.env.CLEANUP_TEMP_FILES !== 'false';
 const POLLING_INTERVAL = 1000; // 1 second
 
+// Optional API secret for authentication (recommended when exposing to internet)
+const API_SECRET = process.env.API_SECRET || '';
+
 // Initialize Express app
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
+
+// Optional API secret authentication middleware
+// If API_SECRET is set, requests must include X-API-Secret header
+const authenticateRequest: express.RequestHandler = (req, res, next) => {
+  // If no API_SECRET is configured, allow all requests
+  if (!API_SECRET) {
+    return next();
+  }
+
+  const providedSecret = req.headers['x-api-secret'];
+  
+  if (!providedSecret || providedSecret !== API_SECRET) {
+    console.warn(`🔒 Unauthorized request from ${req.ip} to ${req.path}`);
+    res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Invalid or missing API secret',
+      outputs: [],
+      errors: ['Authentication required. Provide X-API-Secret header.'],
+    });
+    return;
+  }
+
+  next();
+};
+
+// Apply authentication to all routes except health check (for monitoring)
+app.use((req, res, next) => {
+  // Allow unauthenticated health checks for monitoring tools
+  if (req.path === '/health' && req.method === 'GET') {
+    return next();
+  }
+  return authenticateRequest(req, res, next);
+});
 
 // Initialize OSC client
 let oscClient: Client | null = null;
@@ -312,6 +348,7 @@ app.listen(PORT, () => {
 📁 Result directory: ${RESULT_DIR}
 ⏱️  Script timeout: ${SCRIPT_TIMEOUT}ms
 🧹 Cleanup temp files: ${CLEANUP_TEMP_FILES}
+🔒 API Authentication: ${API_SECRET ? 'ENABLED (API_SECRET set)' : 'DISABLED (open access)'}
 
 Endpoints:
   GET  /health          - Bridge and MA3 status
